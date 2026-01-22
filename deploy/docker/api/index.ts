@@ -4,7 +4,7 @@ import { bearerAuth } from 'hono/bearer-auth';
 import { serve } from '@hono/node-server';
 import Database from 'better-sqlite3';
 import { mkdir, readFile, writeFile, readdir, rm } from 'fs/promises';
-import { join, dirname } from 'path';
+import { join } from 'path';
 import { existsSync } from 'fs';
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
@@ -39,8 +39,7 @@ app.use('*', cors());
 
 app.get('/api/health', (c) => c.json({ status: 'ok' }));
 
-app.use('/api/*', async (c, next) => {
-  if (c.req.path === '/api/health') return next();
+app.use('/api/admin/*', async (c, next) => {
   if (!API_TOKEN) return next();
   return bearerAuth({ token: API_TOKEN })(c, next);
 });
@@ -167,6 +166,50 @@ app.delete('/api/admin/skills/:owner/:repo/:skill', async (c) => {
 
   db.prepare('DELETE FROM skills WHERE id = ?').run(id);
   return c.json({ ok: true });
+});
+
+app.post('/api/admin/sync-github', async (c) => {
+  const body = await c.req.json<{ repo: string; path?: string }>();
+  const { repo, path = 'skills' } = body;
+
+  const headers: HeadersInit = {
+    Accept: 'application/vnd.github.v3+json',
+    'User-Agent': 'skills-hub',
+  };
+
+  const listUrl = `https://api.github.com/repos/${repo}/contents/${path}`;
+  const listRes = await fetch(listUrl, { headers });
+
+  if (!listRes.ok) {
+    return c.json({ error: 'Failed to fetch repo' }, 400);
+  }
+
+  const contents = (await listRes.json()) as Array<{ type: string; name: string }>;
+  const skillDirs = contents.filter((item) => item.type === 'dir');
+
+  let synced = 0;
+  for (const dir of skillDirs) {
+    const skillMdUrl = `https://raw.githubusercontent.com/${repo}/main/${path}/${dir.name}/SKILL.md`;
+    const skillRes = await fetch(skillMdUrl);
+    if (!skillRes.ok) continue;
+
+    const content = await skillRes.text();
+    const [owner, repoName] = repo.split('/');
+    const id = `${owner}/${repoName}/${dir.name}`;
+    const skillDir = join(SKILLS_DIR, owner, repoName, dir.name);
+
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(join(skillDir, 'SKILL.md'), content);
+
+    db.prepare(`
+      INSERT OR REPLACE INTO skills (id, owner, repo, name, content, updated_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))
+    `).run(id, owner, repoName, dir.name, content);
+
+    synced++;
+  }
+
+  return c.json({ ok: true, synced });
 });
 
 console.log(`Server running on http://localhost:${PORT}`);

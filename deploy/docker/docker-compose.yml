@@ -17,10 +17,10 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:8787
     ports:
       - "3000:3000"
-    environment:
-      - VITE_API_URL=http://localhost:8787
     depends_on:
       - api
     restart: unless-stopped
