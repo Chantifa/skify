@@ -43,13 +43,13 @@ export default function App() {
     const timer = setTimeout(() => {
       fetchSkills(search);
     }, 300);
-    
+
     return () => clearTimeout(timer);
   }, [search, fetchSkills]);
 
   async function openSkill(skill: Skill) {
     setSelected(skill);
-    
+
     if (!skill.content) {
       try {
         const res = await fetch(`${API_URL}/api/skills/${skill.owner}/${skill.repo}/${skill.name}`);
@@ -109,7 +109,7 @@ export default function App() {
             </svg>
             <span>skify</span>
           </div>
-          
+
           <div className="search-wrapper">
             <div className="search-box">
               <svg className="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -135,7 +135,7 @@ export default function App() {
               Agent <span className="highlight">Skills</span> Kit
             </h1>
             <p>
-              Browse, search and install skills for AI coding agents. 
+              Browse, search and install skills for AI coding agents.
               Works with Cursor, Claude Code, Codex and more.
             </p>
             <div className="stats">

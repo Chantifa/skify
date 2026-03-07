@@ -104,12 +104,41 @@ skify supports role-based API tokens:
 - `publish`: includes `read`, plus publish/update skill content
 - `admin`: includes `publish`, plus delete/sync/token management
 
+Access behavior:
+
+- Default (`ALLOW_ANONYMOUS_READ` unset): anonymous read is enabled (smooth onboarding)
+- Enterprise mode: set `ALLOW_ANONYMOUS_READ=false` to require token for all read APIs
+
+Quick start (default mode):
+
+```bash
+# set registry/admin token for CLI
+skify config set registry https://your-registry-url
+skify config set token <admin-token>
+
+# publish then browse immediately (web/cli read works without extra token)
+skify publish ./my-skill
+```
+
+Enterprise mode (strict):
+
+```bash
+# server env
+ALLOW_ANONYMOUS_READ=false
+
+# create a read-only token for users/services
+skify token create team-read --permissions read
+```
+
 ```bash
 # list existing tokens (admin token required)
 skify token list
 
 # create publish token
 skify token create ci-publisher --permissions publish
+
+# create read token for Web UI
+skify token create web-read --permissions read
 
 # revoke token by id
 skify token revoke <token-id>
