@@ -96,6 +96,29 @@ skify config set registry https://your-registry-url
 skify config set token <your-api-token>
 ```
 
+### Post-Deploy Checklist (1 minute)
+
+```bash
+# 1) API health
+curl -sS https://your-registry-url/api/health
+# expected: {"status":"ok"}
+
+# 2) list skills (default onboarding mode)
+curl -sS https://your-registry-url/api/skills
+
+# 3) CLI connectivity
+skify config set registry https://your-registry-url
+skify config set token <admin-token>
+skify browse
+```
+
+If you run enterprise mode (`ALLOW_ANONYMOUS_READ=false`), step 2 should include a read/admin token:
+
+```bash
+curl -sS https://your-registry-url/api/skills \
+  -H "Authorization: Bearer <read-or-admin-token>"
+```
+
 ### RBAC Tokens
 
 skify supports role-based API tokens:
