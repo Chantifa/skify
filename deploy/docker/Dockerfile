@@ -19,7 +19,6 @@ RUN pnpm build
 FROM node:20-alpine AS runner
 
 WORKDIR /app
-RUN corepack enable pnpm
 
 COPY --from=builder /app/packages/web/dist ./web
 COPY --from=builder /app/packages/cli/dist ./cli
