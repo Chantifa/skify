@@ -96,6 +96,25 @@ skify config set registry https://your-registry-url
 skify config set token <your-api-token>
 ```
 
+### RBAC Tokens
+
+skify supports role-based API tokens:
+
+- `read`: browse/search/download/install
+- `publish`: includes `read`, plus publish/update skill content
+- `admin`: includes `publish`, plus delete/sync/token management
+
+```bash
+# list existing tokens (admin token required)
+skify token list
+
+# create publish token
+skify token create ci-publisher --permissions publish
+
+# revoke token by id
+skify token revoke <token-id>
+```
+
 ## CLI Usage
 
 ### Install CLI
@@ -120,6 +139,7 @@ npm install -g @skify/cli
 | `skify publish <dir>` | Publish skill to registry |
 | `skify search <query>` | Search for skills |
 | `skify read <name>` | Output skill content |
+| `skify token ...` | Manage registry RBAC tokens |
 | `skify config` | Manage configuration |
 
 ### Examples

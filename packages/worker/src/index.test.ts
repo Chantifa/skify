@@ -15,12 +15,12 @@ function createEnv(overrides: Partial<TestEnv> = {}): TestEnv {
 }
 
 describe('admin auth middleware', () => {
-  it('returns 503 when API_TOKEN is missing and insecure mode is disabled', async () => {
+  it('returns 401 when no token is provided and insecure mode is disabled', async () => {
     const res = await app.request('/api/admin/ping', { method: 'POST' }, createEnv() as never);
 
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(401);
     const body = await res.json<{ error: string }>();
-    expect(body.error).toContain('API_TOKEN');
+    expect(body.error).toContain('Unauthorized');
   });
 
   it('allows admin route without token when insecure mode is explicitly enabled', async () => {
