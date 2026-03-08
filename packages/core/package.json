@@ -15,13 +15,15 @@
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts",
-    "dev": "tsup src/index.ts --format esm --dts --watch"
+    "dev": "tsup src/index.ts --format esm --dts --watch",
+    "test": "vitest run"
   },
   "dependencies": {
     "gray-matter": "^4.0.3"
   },
   "devDependencies": {
     "tsup": "^8.3.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.18"
   }
 }
