@@ -3,7 +3,7 @@ import { Command } from 'commander';
 import pc from 'picocolors';
 import ora from 'ora';
 import { mkdir, writeFile, readdir, rm, readFile, stat } from 'fs/promises';
-import { join, dirname } from 'path';
+import { join, dirname, relative } from 'path';
 import { createInterface } from 'readline';
 import {
   searchSkillRepos,
@@ -14,6 +14,27 @@ import {
 } from '@skify/core';
 import { getConfig, setConfig, getTargetDir } from './config.js';
 import { recordInstall, removeFromLock, getAllInstalled } from './lockfile.js';
+
+const TEXT_EXTENSIONS = new Set(['.md', '.txt', '.json', '.yaml', '.yml', '.ts', '.js', '.py', '.sh', '.toml', '.xml', '.html', '.css']);
+
+async function collectFiles(dir: string, baseDir: string): Promise<Record<string, string>> {
+  const files: Record<string, string> = {};
+  const entries = await readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const nested = await collectFiles(fullPath, baseDir);
+      Object.assign(files, nested);
+    } else {
+      const ext = '.' + entry.name.split('.').pop()!.toLowerCase();
+      if (TEXT_EXTENSIONS.has(ext)) {
+        const relPath = relative(baseDir, fullPath).replace(/\\/g, '/');
+        files[relPath] = await readFile(fullPath, 'utf-8');
+      }
+    }
+  }
+  return files;
+}
 
 async function confirm(message: string): Promise<boolean> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -524,14 +545,18 @@ program
       process.exit(1);
     }
 
-    const skillMdPath = source.endsWith('SKILL.md') ? source : join(source, 'SKILL.md');
+    const skillDir = source.endsWith('SKILL.md') ? dirname(source) : source;
+    const skillMdPath = join(skillDir, 'SKILL.md');
     const content = await readFile(skillMdPath, 'utf-8');
-    const pathParts = source.split('/');
+    const pathParts = skillDir.replace(/\\/g, '/').split('/');
     const skillName = pathParts[pathParts.length - 1] || pathParts[pathParts.length - 2];
     const meta = parseSkillMd(content);
     const displayName = meta.name || skillName;
 
-    const confirmed = await confirm(`Publish "${displayName}" to registry?`);
+    const files = await collectFiles(skillDir, skillDir);
+    const fileCount = Object.keys(files).length;
+
+    const confirmed = await confirm(`Publish "${displayName}" (${fileCount} file${fileCount !== 1 ? 's' : ''}) to registry?`);
     if (!confirmed) {
       console.log(pc.yellow('Cancelled.'));
       process.exit(0);
@@ -553,6 +578,7 @@ program
           description: meta.description,
           tags: meta.tags,
           content,
+          files,
         }),
       });
 

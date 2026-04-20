@@ -235,15 +235,17 @@ skify sync
 ┌─────────────────────────────────────────────────────────────────────┐
 │  2. PUBLISH                                                         │
 │                                                                     │
-│     skify publish ./my-skill  ──►  Registry stores skill           │
-│                                    with version tracking            │
+│     skify publish ./my-skill  ──►  Registry stores SKILL.md        │
+│                                    + all docs, templates, and       │
+│                                    subfolders in the directory      │
 └─────────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  3. INSTALL                                                         │
 │                                                                     │
-│     skify add my-skill  ──►  Downloads to .agent/skills/           │
+│     skify add my-skill  ──►  Downloads full directory tree         │
+│                               to .agent/skills/my-skill/           │
 │     skify sync          ──►  Generates AGENTS.md                   │
 └─────────────────────────────────────────────────────────────────────┘
                               │
@@ -298,13 +300,18 @@ Invoke skills: `npx skify read <skill-name>`
 
 ### Skill Structure
 
+A skill is a directory. Everything in it gets published and restored on install — `SKILL.md` is required, everything else is optional.
+
 ```
 my-skill/
 ├── SKILL.md           # Required: Instructions for the agent
+├── docs/              # Optional: Documentation files
 ├── templates/         # Optional: Template files
 ├── examples/          # Optional: Example code
 └── resources/         # Optional: Other resources
 ```
+
+Supported file types: `.md`, `.txt`, `.json`, `.yaml`, `.yml`, `.ts`, `.js`, `.py`, `.sh`, `.toml`, `.xml`, `.html`, `.css`
 
 ### SKILL.md Format
 
@@ -330,17 +337,19 @@ Step-by-step instructions.
 
 ### Publish to Your Registry
 
+`skify publish` uploads the entire skill directory — SKILL.md plus all documentation, templates, and subfolders. When someone installs the skill, the full directory tree is restored exactly as published.
+
 ```bash
 # Set up registry (one time)
 skify config set registry https://your-registry
 skify config set token <token>
 
-# Publish
+# Publish (uploads SKILL.md + all files and subfolders)
 cd my-skill
 skify publish .
+# > Publish "my-skill" (5 files) to registry? y
 
-# Version updates
-# Edit SKILL.md, bump version, publish again
+# Version updates: edit SKILL.md, bump version, publish again
 skify publish .
 ```
 

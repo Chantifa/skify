@@ -209,6 +209,7 @@ adminRoutes.post('/skills', requirePermission('publish'), async (c) => {
     description?: string;
     tags?: string[];
     content: string;
+    files?: Record<string, string>;
   }>();
 
   if (!body.owner || !body.repo || !body.name || !body.content) {
@@ -217,7 +218,13 @@ adminRoutes.post('/skills', requirePermission('publish'), async (c) => {
 
   const id = `${body.owner}/${body.repo}/${body.name}`;
 
-  await c.env.SKILLS.put(`${id}/SKILL.md`, body.content);
+  if (body.files && Object.keys(body.files).length > 0) {
+    for (const [relPath, fileContent] of Object.entries(body.files)) {
+      await c.env.SKILLS.put(`${id}/${relPath}`, fileContent);
+    }
+  } else {
+    await c.env.SKILLS.put(`${id}/SKILL.md`, body.content);
+  }
 
   await c.env.DB.prepare(`
     INSERT OR REPLACE INTO skills (id, owner, repo, name, description, tags, content, updated_at)
