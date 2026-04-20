@@ -15,13 +15,88 @@ interface Skill {
   updated_at: string;
 }
 
+interface SkillFiles {
+  [path: string]: string;
+}
+
+interface FileTreeNode {
+  name: string;
+  path: string;
+  children?: FileTreeNode[];
+}
+
 const API_URL = import.meta.env.VITE_API_URL || '';
+
+function buildTree(paths: string[]): FileTreeNode[] {
+  const root: FileTreeNode[] = [];
+  for (const path of paths) {
+    const parts = path.split('/');
+    let nodes = root;
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      const fullPath = parts.slice(0, i + 1).join('/');
+      let node = nodes.find((n) => n.name === part);
+      if (!node) {
+        node = { name: part, path: fullPath };
+        if (i < parts.length - 1) node.children = [];
+        nodes.push(node);
+      }
+      if (node.children) nodes = node.children;
+    }
+  }
+  return root;
+}
+
+function FileTree({
+  nodes,
+  active,
+  onSelect,
+  depth = 0,
+}: {
+  nodes: FileTreeNode[];
+  active: string;
+  onSelect: (path: string) => void;
+  depth?: number;
+}) {
+  return (
+    <>
+      {nodes.map((node) =>
+        node.children ? (
+          <div key={node.path}>
+            <div className="file-tree-dir" style={{ paddingLeft: depth * 14 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z" />
+              </svg>
+              {node.name}
+            </div>
+            <FileTree nodes={node.children} active={active} onSelect={onSelect} depth={depth + 1} />
+          </div>
+        ) : (
+          <button
+            key={node.path}
+            className={`file-tree-file${active === node.path ? ' active' : ''}`}
+            style={{ paddingLeft: 12 + depth * 14 }}
+            onClick={() => onSelect(node.path)}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+            {node.name}
+          </button>
+        )
+      )}
+    </>
+  );
+}
 
 export default function App() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Skill | null>(null);
+  const [skillFiles, setSkillFiles] = useState<SkillFiles | null>(null);
+  const [activeFile, setActiveFile] = useState('SKILL.md');
   const [copied, setCopied] = useState(false);
 
   const fetchSkills = useCallback(async (query: string) => {
@@ -40,29 +115,47 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchSkills(search);
-    }, 300);
-
+    const timer = setTimeout(() => fetchSkills(search), 300);
     return () => clearTimeout(timer);
   }, [search, fetchSkills]);
 
   async function openSkill(skill: Skill) {
     setSelected(skill);
+    setSkillFiles(null);
+    setActiveFile('SKILL.md');
 
+    try {
+      const res = await fetch(
+        `${API_URL}/api/download/${encodeURIComponent(skill.owner)}/${encodeURIComponent(skill.repo)}/${encodeURIComponent(skill.name)}`
+      );
+      if (res.ok) {
+        const data = await res.json() as { files: SkillFiles };
+        setSkillFiles(data.files || {});
+        return;
+      }
+    } catch {}
+
+    // fallback to single content
     if (!skill.content) {
       try {
-        const res = await fetch(`${API_URL}/api/skills/${skill.owner}/${skill.repo}/${skill.name}`);
+        const res = await fetch(
+          `${API_URL}/api/skills/${encodeURIComponent(skill.owner)}/${encodeURIComponent(skill.repo)}/${encodeURIComponent(skill.name)}`
+        );
         if (res.ok) {
           const data = await res.json();
-          setSelected({ ...skill, content: data.content || skill.description });
-        } else {
-          setSelected({ ...skill, content: skill.description });
+          setSkillFiles({ 'SKILL.md': data.content || skill.description });
+          return;
         }
-      } catch {
-        setSelected({ ...skill, content: skill.description });
-      }
+      } catch {}
     }
+
+    setSkillFiles({ 'SKILL.md': skill.content || skill.description });
+  }
+
+  function closeModal() {
+    setSelected(null);
+    setSkillFiles(null);
+    setActiveFile('SKILL.md');
   }
 
   function copyInstallCmd() {
@@ -74,6 +167,16 @@ export default function App() {
   }
 
   const totalStars = skills.reduce((a, s) => a + s.stars, 0);
+
+  const filePaths = skillFiles ? Object.keys(skillFiles).sort((a, b) => {
+    if (a === 'SKILL.md') return -1;
+    if (b === 'SKILL.md') return 1;
+    return a.localeCompare(b);
+  }) : [];
+
+  const treeNodes = buildTree(filePaths);
+  const activeContent = skillFiles?.[activeFile] ?? '';
+  const multiFile = filePaths.length > 1;
 
   return (
     <>
@@ -214,21 +317,42 @@ export default function App() {
       </main>
 
       {selected && (
-        <div className="modal-overlay" onClick={() => setSelected(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={closeModal}>
+          <div className={`modal${multiFile ? ' modal-wide' : ''}`} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{selected.name}</h2>
-              <button className="modal-close" onClick={() => setSelected(null)}>×</button>
+              <button className="modal-close" onClick={closeModal}>×</button>
             </div>
-            <div className="modal-body">
-              <div className="install-cmd">
-                <code>npx skify add {selected.owner}/{selected.repo}/{selected.name}</code>
-                <button className="copy-btn" onClick={copyInstallCmd}>
-                  {copied ? '✓ Copied' : 'Copy'}
-                </button>
-              </div>
-              <div className="skill-content">
-                <ReactMarkdown>{selected.content || selected.description}</ReactMarkdown>
+
+            <div className="modal-body-wrapper">
+              {multiFile && (
+                <div className="file-tree">
+                  <div className="file-tree-label">Files</div>
+                  <FileTree nodes={treeNodes} active={activeFile} onSelect={setActiveFile} />
+                </div>
+              )}
+
+              <div className="modal-body">
+                <div className="install-cmd">
+                  <code>npx skify add {selected.owner}/{selected.repo}/{selected.name}</code>
+                  <button className="copy-btn" onClick={copyInstallCmd}>
+                    {copied ? '✓ Copied' : 'Copy'}
+                  </button>
+                </div>
+
+                {multiFile && (
+                  <div className="active-file-path">{activeFile}</div>
+                )}
+
+                <div className="skill-content">
+                  {skillFiles === null ? (
+                    <div className="loading" style={{ padding: '40px 0' }}>
+                      <div className="spinner" />
+                    </div>
+                  ) : (
+                    <ReactMarkdown>{activeContent}</ReactMarkdown>
+                  )}
+                </div>
               </div>
             </div>
           </div>
