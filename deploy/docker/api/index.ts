@@ -230,6 +230,7 @@ app.post('/api/admin/skills', requirePermission('publish'), async (c) => {
     description?: string;
     tags?: string[];
     content: string;
+    files?: Record<string, string>;
   }>();
 
   if (!body.owner || !body.repo || !body.name || !body.content) {
@@ -240,7 +241,16 @@ app.post('/api/admin/skills', requirePermission('publish'), async (c) => {
   const skillDir = join(SKILLS_DIR, body.owner, body.repo, body.name);
 
   await mkdir(skillDir, { recursive: true });
-  await writeFile(join(skillDir, 'SKILL.md'), body.content);
+
+  if (body.files && Object.keys(body.files).length > 0) {
+    for (const [relPath, fileContent] of Object.entries(body.files)) {
+      const fullPath = join(skillDir, relPath);
+      await mkdir(join(fullPath, '..'), { recursive: true });
+      await writeFile(fullPath, fileContent);
+    }
+  } else {
+    await writeFile(join(skillDir, 'SKILL.md'), body.content);
+  }
 
   db.prepare(`
     INSERT OR REPLACE INTO skills (id, owner, repo, name, description, tags, content, updated_at)
