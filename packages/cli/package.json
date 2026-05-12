@@ -6,7 +6,8 @@
     "dist"
   ],
   "bin": {
-    "skify": "./dist/index.js"
+    "skify": "./dist/index.js",
+    "skillhub": "./dist/index.js"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts",

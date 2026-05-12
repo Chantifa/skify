@@ -17,6 +17,12 @@ import { recordInstall, removeFromLock, getAllInstalled } from './lockfile.js';
 
 const TEXT_EXTENSIONS = new Set(['.md', '.txt', '.json', '.yaml', '.yml', '.ts', '.js', '.py', '.sh', '.toml', '.xml', '.html', '.css']);
 
+function canonicalToCoord(canonical: string): { namespace: string; slug: string } {
+  const idx = canonical.indexOf('--');
+  if (idx === -1) return { namespace: 'global', slug: canonical };
+  return { namespace: canonical.slice(0, idx), slug: canonical.slice(idx + 2) };
+}
+
 async function collectFiles(dir: string, baseDir: string): Promise<Record<string, string>> {
   const files: Record<string, string> = {};
   const entries = await readdir(dir, { withFileTypes: true });
@@ -373,6 +379,91 @@ program
       console.error(pc.red(String(err)));
       process.exit(1);
     }
+  });
+
+program
+  .command('install <skill>')
+  .description('Install a skill from a SkillHub registry')
+  .option('--registry <url>', 'SkillHub registry URL')
+  .option('-g, --global', 'Install globally')
+  .option('--agent <name>', 'Target agent (cursor/claude/project)', 'project')
+  .action(async (skillArg, options) => {
+    const config = getConfig();
+    const registry = (options.registry || config.registry || '').replace(/\/$/, '');
+    if (!registry) {
+      console.log(pc.yellow('No registry configured. Use --registry <url> or: skillhub config set registry <url>'));
+      process.exit(1);
+    }
+
+    const spinner = ora(`Installing ${skillArg}...`).start();
+    try {
+      const atIdx = skillArg.lastIndexOf('@');
+      const skillSlug = atIdx > 0 ? skillArg.slice(0, atIdx) : skillArg;
+      const requestedVersion = atIdx > 0 ? skillArg.slice(atIdx + 1) : 'latest';
+
+      const headers: HeadersInit = {};
+      if (config.token) headers.Authorization = `Bearer ${config.token}`;
+
+      const resolveRes = await fetch(`${registry}/api/v1/resolve/${encodeURIComponent(skillSlug)}?version=${requestedVersion}`, { headers });
+      if (!resolveRes.ok) {
+        if (resolveRes.status === 404) throw new Error(`Skill not found: ${skillSlug}`);
+        if (resolveRes.status === 401 || resolveRes.status === 403) {
+          spinner.fail('Authentication required');
+          console.log(pc.yellow('\nNext: run `skillhub login --token <your-api-token>`'));
+          process.exit(1);
+        }
+        throw new Error(`Failed to resolve skill: ${resolveRes.status}`);
+      }
+
+      const resolved = await resolveRes.json() as { match?: { version: string }; latestVersion?: { version: string } };
+      const version = resolved.match?.version ?? resolved.latestVersion?.version;
+      if (!version) throw new Error('Could not determine skill version');
+
+      const { namespace, slug } = canonicalToCoord(skillSlug);
+      const base = `${registry}/api/v1/skills/${namespace}/${slug}/versions/${version}`;
+
+      const filesRes = await fetch(`${base}/files`, { headers });
+      if (!filesRes.ok) throw new Error(`Failed to list skill files: ${filesRes.status}`);
+
+      const filesData = await filesRes.json() as { data: Array<{ filePath: string }> };
+      const files = filesData.data ?? [];
+      if (files.length === 0) throw new Error('Skill package contains no files');
+
+      const target = options.agent as 'cursor' | 'claude' | 'project';
+      const targetDir = getTargetDir(target, slug, options.global);
+      await mkdir(targetDir, { recursive: true });
+
+      for (const file of files) {
+        const fileRes = await fetch(`${base}/file?path=${encodeURIComponent(file.filePath)}`, { headers });
+        if (!fileRes.ok) continue;
+        const content = await fileRes.text();
+        const fullPath = join(targetDir, file.filePath);
+        await mkdir(dirname(fullPath), { recursive: true });
+        await writeFile(fullPath, content);
+      }
+
+      await recordInstall(target, options.global, slug, `skillhub:${registry}/${skillSlug}`, version);
+      spinner.succeed(`Installed ${pc.green(slug)} v${version} to ${pc.dim(targetDir)}`);
+    } catch (err) {
+      spinner.fail('Installation failed');
+      console.error(pc.red(String(err)));
+      process.exit(1);
+    }
+  });
+
+program
+  .command('login')
+  .description('Save an API token for a SkillHub registry')
+  .option('--token <token>', 'API token (sk_...)')
+  .option('--registry <url>', 'SkillHub registry URL to associate with')
+  .action(async (options) => {
+    if (!options.token) {
+      console.log(pc.yellow('Usage: skillhub login --token <your-api-token>'));
+      process.exit(1);
+    }
+    setConfig('token', options.token);
+    if (options.registry) setConfig('registry', options.registry.replace(/\/$/, ''));
+    console.log(pc.green('Token saved.'));
   });
 
 program

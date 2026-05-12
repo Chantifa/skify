@@ -102,6 +102,11 @@ async function getAllInstalled(target, global) {
 
 // src/index.ts
 var TEXT_EXTENSIONS = /* @__PURE__ */ new Set([".md", ".txt", ".json", ".yaml", ".yml", ".ts", ".js", ".py", ".sh", ".toml", ".xml", ".html", ".css"]);
+function canonicalToCoord(canonical) {
+  const idx = canonical.indexOf("--");
+  if (idx === -1) return { namespace: "global", slug: canonical };
+  return { namespace: canonical.slice(0, idx), slug: canonical.slice(idx + 2) };
+}
 async function collectFiles(dir, baseDir) {
   const files = {};
   const entries = await readdir(dir, { withFileTypes: true });
@@ -388,6 +393,68 @@ program.command("add <source>").description("Install a skill (tries registry fir
     console.error(pc.red(String(err)));
     process.exit(1);
   }
+});
+program.command("install <skill>").description("Install a skill from a SkillHub registry").option("--registry <url>", "SkillHub registry URL").option("-g, --global", "Install globally").option("--agent <name>", "Target agent (cursor/claude/project)", "project").action(async (skillArg, options) => {
+  const config2 = getConfig();
+  const registry = (options.registry || config2.registry || "").replace(/\/$/, "");
+  if (!registry) {
+    console.log(pc.yellow("No registry configured. Use --registry <url> or: skillhub config set registry <url>"));
+    process.exit(1);
+  }
+  const spinner = ora(`Installing ${skillArg}...`).start();
+  try {
+    const atIdx = skillArg.lastIndexOf("@");
+    const skillSlug = atIdx > 0 ? skillArg.slice(0, atIdx) : skillArg;
+    const requestedVersion = atIdx > 0 ? skillArg.slice(atIdx + 1) : "latest";
+    const headers = {};
+    if (config2.token) headers.Authorization = `Bearer ${config2.token}`;
+    const resolveRes = await fetch(`${registry}/api/v1/resolve/${encodeURIComponent(skillSlug)}?version=${requestedVersion}`, { headers });
+    if (!resolveRes.ok) {
+      if (resolveRes.status === 404) throw new Error(`Skill not found: ${skillSlug}`);
+      if (resolveRes.status === 401 || resolveRes.status === 403) {
+        spinner.fail("Authentication required");
+        console.log(pc.yellow("\nNext: run `skillhub login --token <your-api-token>`"));
+        process.exit(1);
+      }
+      throw new Error(`Failed to resolve skill: ${resolveRes.status}`);
+    }
+    const resolved = await resolveRes.json();
+    const version = resolved.match?.version ?? resolved.latestVersion?.version;
+    if (!version) throw new Error("Could not determine skill version");
+    const { namespace, slug } = canonicalToCoord(skillSlug);
+    const base = `${registry}/api/v1/skills/${namespace}/${slug}/versions/${version}`;
+    const filesRes = await fetch(`${base}/files`, { headers });
+    if (!filesRes.ok) throw new Error(`Failed to list skill files: ${filesRes.status}`);
+    const filesData = await filesRes.json();
+    const files = filesData.data ?? [];
+    if (files.length === 0) throw new Error("Skill package contains no files");
+    const target = options.agent;
+    const targetDir = getTargetDir(target, slug, options.global);
+    await mkdir(targetDir, { recursive: true });
+    for (const file of files) {
+      const fileRes = await fetch(`${base}/file?path=${encodeURIComponent(file.filePath)}`, { headers });
+      if (!fileRes.ok) continue;
+      const content = await fileRes.text();
+      const fullPath = join3(targetDir, file.filePath);
+      await mkdir(dirname2(fullPath), { recursive: true });
+      await writeFile2(fullPath, content);
+    }
+    await recordInstall(target, options.global, slug, `skillhub:${registry}/${skillSlug}`, version);
+    spinner.succeed(`Installed ${pc.green(slug)} v${version} to ${pc.dim(targetDir)}`);
+  } catch (err) {
+    spinner.fail("Installation failed");
+    console.error(pc.red(String(err)));
+    process.exit(1);
+  }
+});
+program.command("login").description("Save an API token for a SkillHub registry").option("--token <token>", "API token (sk_...)").option("--registry <url>", "SkillHub registry URL to associate with").action(async (options) => {
+  if (!options.token) {
+    console.log(pc.yellow("Usage: skillhub login --token <your-api-token>"));
+    process.exit(1);
+  }
+  setConfig("token", options.token);
+  if (options.registry) setConfig("registry", options.registry.replace(/\/$/, ""));
+  console.log(pc.green("Token saved."));
 });
 program.command("update [name]").description("Update installed skills (all or specific)").option("--agent <name>", "Target agent (cursor/claude/project)", "project").option("-g, --global", "Use global skills").option("-t, --token <token>", "GitHub token").action(async (name, options) => {
   const spinner = ora("Updating skills...").start();
