@@ -83,9 +83,9 @@ function getRegistryAuthOrExit(overrideToken?: string): { registry: string; toke
 const program = new Command();
 
 program
-  .name('skify')
-  .description('Agent Skills Kit - install & manage AI agent skills')
-  .version('0.1.0');
+  .name('skillhub')
+  .description('SkillHub CLI - install & publish AI agent skills')
+  .version('0.2.2');
 
 program
   .command('browse')

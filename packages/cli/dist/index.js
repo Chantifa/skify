@@ -20,7 +20,7 @@ import Conf from "conf";
 import { homedir } from "os";
 import { join } from "path";
 var config = new Conf({
-  projectName: "skify",
+  projectName: "skillhub",
   defaults: {
     defaultTarget: "project"
   }
@@ -159,7 +159,7 @@ function getRegistryAuthOrExit(overrideToken) {
   return { registry: config2.registry, token };
 }
 var program = new Command();
-program.name("skify").description("Agent Skills Kit - install & manage AI agent skills").version("0.1.0");
+program.name("skillhub").description("SkillHub CLI - install & publish AI agent skills").version("0.2.2");
 program.command("browse").description("Browse skills from private registry").option("-q, --query <query>", "Search query").action(async (options) => {
   const config2 = getConfig();
   if (!config2.registry) {

@@ -11,7 +11,7 @@
     "build": "turbo build",
     "test": "pnpm --filter @skify/core test && pnpm --filter @skify/worker test",
     "test:e2e": "node ./scripts/e2e-docker.mjs",
-    "cli": "pnpm --filter @skify/cli",
+    "cli": "pnpm --filter skillhub",
     "worker": "pnpm --filter @skify/worker",
     "web": "pnpm --filter @skify/web"
   },

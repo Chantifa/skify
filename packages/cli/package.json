@@ -1,12 +1,11 @@
 {
-  "name": "@skify/cli",
+  "name": "skillhub",
   "version": "0.2.2",
   "type": "module",
   "files": [
     "dist"
   ],
   "bin": {
-    "skify": "./dist/index.js",
     "skillhub": "./dist/index.js"
   },
   "scripts": {
